@@ -1,178 +1,23 @@
-import socket
-import select
-import pprint
-HEADER_LENGTH = 10
+from socket import *
+from threading import Thread
+import sys, select
 
-IP = "127.0.0.1"
-PORT = 1234
+# acquire server host and port from command line parameter
+# if len(sys.argv) != 2:
+#     print("\n===== Error usage, python3 TCPServer3.py SERVER_PORT ======\n");
+#     exit(0);
+serverHost = "127.0.0.1"
+serverPort = 1247
+serverAddress = (serverHost, serverPort)
 
-# Create a socket
-# socket.AF_INET - address family, IPv4, some otehr possible are AF_INET6, AF_BLUETOOTH, AF_UNIX
-# socket.SOCK_STREAM - TCP, conection-based, socket.SOCK_DGRAM - UDP, connectionless, datagrams, socket.SOCK_RAW - raw IP packets
-server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+# define socket for the server side and bind address
+serverSocket = socket(AF_INET, SOCK_STREAM)
+serverSocket.bind(serverAddress)
 
-# SO_ - socket option
-# SOL_ - socket option level
-# Sets REUSEADDR (as a socket option) to 1 on socket
-server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-# Bind, so server informs operating system that it's going to use given IP and port
-# For a server using 0.0.0.0 means to listen on all available interfaces, useful to connect locally to 127.0.0.1 and remotely to LAN interface IP
-server_socket.bind((IP, PORT))
-
-# This makes server listen to new connections
-server_socket.listen()
-
-# List of sockets for select.select()
-sockets_list = [server_socket]
-
-# List of connected clients - socket as a key, user header and name as data
-clients = {}
-
-# List of online users
-online_users = []
-
+# Online Users
+OnlineUsers = []
 # Usernames & Passwords for the clients
 Accounts = {}
-
-# The main function where the code runs. 
-def main():
-
-    while True:
-
-        # Calls Unix select() system call or Windows select() WinSock call with three parameters:
-        #   - rlist - sockets to be monitored for incoming data
-        #   - wlist - sockets for data to be send to (checks if for example buffers are not full and socket is ready to send some data)
-        #   - xlist - sockets to be monitored for exceptions (we want to monitor all sockets for errors, so we can use rlist)
-        # Returns lists:
-        #   - reading - sockets we received some data on (that way we don't have to check sockets manually)
-        #   - writing - sockets ready for data to be send thru them
-        #   - errors  - sockets with some exceptions
-        # This is a blocking call, code execution will "wait" here and "get" notified in case any action should be taken
-        read_sockets, _, exception_sockets = select.select(sockets_list, [], sockets_list)
-
-        # Iterate over notified sockets
-        for notified_socket in read_sockets:
-
-            # If notified socket is a server socket - new connection, accept it
-            if notified_socket == server_socket:
-
-                # Accept new connection
-                # That gives us new socket - client socket, connected to this given client only, it's unique for that client
-                # The other returned object is ip/port set
-                client_socket, client_address = server_socket.accept()
-
-                # Client should send his name right away, receive it
-                user = receive_message(client_socket)
-                username = user['data'].decode('utf-8')
-
-                # If False - client disconnected before he sent his name
-                if user is False:
-                    continue
-
-                # Checks if username exists already or not 
-                if username in Accounts:
-
-                    old_account = "Old Account".encode('utf-8')
-                    old_account_header = f"{len(old_account):<{HEADER_LENGTH}}".encode('utf-8')
-                    client_socket.send(old_account_header + old_account)
-                    password = receive_message(client_socket)
-                    password = password['data'].decode('utf-8').strip()
-
-                    if password == Accounts[username]:
-                        successful_login = "Successfully Logged In".encode('utf-8')
-                        successful_login_header = f"{len(successful_login):<{HEADER_LENGTH}}".encode('utf-8')
-                        client_socket.send(successful_login_header + successful_login)
-                        
-                    else:
-                        
-                        while True:
-
-                            wrong_login = "Invalid Password, Please try again!".encode('utf-8')
-                            wrong_login_header = f"{len(wrong_login):<{HEADER_LENGTH}}".encode('utf-8')
-                            client_socket.send(wrong_login_header + wrong_login)
-
-                            password = receive_message(client_socket)
-                            password = password['data'].decode('utf-8').strip()
-
-                            if password == Accounts[username]:
-                                successful_login = "Successfully Logged In".encode('utf-8')
-                                successful_login_header = f"{len(successful_login):<{HEADER_LENGTH}}".encode('utf-8')
-                                client_socket.send(successful_login_header + successful_login)
-                                break
-                            
-
-                else:
-                    new_account = "New Account".encode('utf-8')
-                    new_account_header = f"{len(new_account):<{HEADER_LENGTH}}".encode('utf-8')
-                    client_socket.send(new_account_header + new_account)
-                    password = receive_message(client_socket)
-                    password = password['data'].decode('utf-8')
-                    Accounts[username] = password
-                    successful_login = "Successfully Logged In".encode('utf-8')
-                    successful_login_header = f"{len(successful_login):<{HEADER_LENGTH}}".encode('utf-8')
-                    client_socket.send(successful_login_header + successful_login)
-
-                # Add accepted socket to select.select() list
-                sockets_list.append(client_socket)
-                online_users.append(username)
-
-                # Also save username and username header
-                clients[client_socket] = user
-
-                print('Accepted new connection from {}:{}, username: {} password: {}'.format(*client_address, username, password))
-
-            # Else existing socket is sending a message
-            else:
-
-                # Receive message
-                message = receive_message(notified_socket)
-                
-                # If False, client disconnected, cleanup
-                if message is False:
-                    print('Closed connection from: {}'.format(clients[notified_socket]['data'].decode('utf-8')))
-                    sockets_list.remove(notified_socket)
-                    del clients[notified_socket]
-                    continue
-
-                # Get user by notified socket, so we will know who sent the message
-                user = clients[notified_socket]
-
-                if message["data"].strip().decode('utf-8') == "whoelse":
-                    string_s = ""
-                    for each_user in online_users:
-                        string_s = string_s + " " + each_user
-                    # string_s.strip()
-                    print(string_s.strip())
-                    list_user = string_s.strip().encode('utf-8')
-                    list_user_header = f"{len(list_user):<{HEADER_LENGTH}}".encode('utf-8')
-                    notified_socket.send(list_user_header + list_user)
-                    continue
-
-                    
-
-                print(f'Received message from {user["data"].decode("utf-8")}: {message["data"].decode("utf-8")}')
-
-                # Iterate over connected clients and broadcast message
-                for client_socket in clients:
-
-                    # But don't sent it to sender
-                    if client_socket != notified_socket:
-
-                        # Send user and message (both with their headers)
-                        # We are reusing here message header sent by sender, and saved username header send by user when he connected
-                        client_socket.send(user['header'] + user['data'] + message['header'] + message['data'])
-
-
-        # It's not really necessary to have this, but will handle some socket exceptions just in case
-        for notified_socket in exception_sockets:
-
-            # Remove from list for socket.socket()
-            sockets_list.remove(notified_socket)
-            user = clients[notified_socket]
-            online_users.remove(user["data"].decode('utf-8'))
-            # Remove from our list of users
-            del clients[notified_socket]
 
 def create_accounts():
     
@@ -183,41 +28,115 @@ def create_accounts():
         username = each_line.split()[0]
         password = each_line.split()[1]
         Accounts[username] = password
+
+# Create the Accounts:
+create_accounts()
+
+"""
+    Define multi-thread class for client
+    This class would be used to define the instance for each connection from each client
+    For example, client-1 makes a connection request to the server, the server will call
+    class (ClientThread) to define a thread for client-1, and when client-2 make a connection
+    request to the server, the server will call class (ClientThread) again and create a thread
+    for client-2. Each client will be runing in a separate therad, which is the multi-threading
+"""
+class ClientThread(Thread):
+
+    def __init__(self, clientAddress, clientSocket):
+        Thread.__init__(self)
+        self.clientAddress = clientAddress
+        self.clientSocket = clientSocket
+        self.clientAlive = False
+        self.firstLogin = True
+        self.username = ""
+        print("===== New connection created for: ", clientAddress)
+        self.clientAlive = True
         
-
-# Handles message receiving
-def receive_message(client_socket):
-
-    try:
-
-        # Receive our "header" containing message length, it's size is defined and constant
-        message_header = client_socket.recv(HEADER_LENGTH)
-
-        # If we received no data, client gracefully closed a connection, for example using socket.close() or socket.shutdown(socket.SHUT_RDWR)
-        if not len(message_header):
-            return False
-
-        # Convert header to int value
-        message_length = int(message_header.decode('utf-8').strip())
-
-        # Return an object of message header and message data
-        return {'header': message_header, 'data': client_socket.recv(message_length)}
-
-    except:
-
-        # If we are here, client closed connection violently, for example by pressing ctrl+c on his script
-        # or just lost his connection
-        # socket.close() also invokes socket.shutdown(socket.SHUT_RDWR) what sends information about closing the socket (shutdown read/write)
-        # and that's also a cause when we receive an empty message
-        return False
-
-if __name__ == "__main__":
-
-    # Creates the accounts from the credentials list.
-    create_accounts()
-    # Runs the main function
-    main()
+    def run(self):
+        message = ''
+        
+        while self.clientAlive:
+            # use recv() to receive message from the client
+            data = self.clientSocket.recv(1024)
+            message = data.decode()
+            self.process_login(message)
+            # if the message from client is empty, the client would be off-line then set the client as offline (alive=Flase)
+            if message == '':
+                self.clientAlive = False
+                print("===== the user disconnected - ", clientAddress)
+                break
+            
+            # handle message from the client
+            if message == 'login':
+                print("[recv] New login request")
+                self.process_login()
+            elif message == 'download':
+                print("[recv] Download request")
+                message = 'download filename'
+                print("[send] " + message)
+                self.clientSocket.send(message.encode())
+            
+            # elif message == '':
 
 
+            else:
+                print("[recv] " + message)
+                print("[send] Cannot understand this message")
+                message = 'Cannot understand this message'
+                self.clientSocket.send(message.encode())
+    
+    """
+        You can create more customized APIs here, e.g., logic for processing user authentication
+        Each api can be used to handle one specific function, for example:
+        def process_login(self):
+            message = 'user credentials request'
+            self.clientSocket.send(message.encode())
+    """
+    def process_login(self,message):
+
+        # If this is true, then this would be the first login.
+        if self.firstLogin is True:
+
+            self.firstLogin = False
+            self.username = message
+            
+            if self.username in Accounts:
+                self.clientSocket.sendall("Old Account".encode())
+                data = self.clientSocket.recv(1024)
+                password = data.decode()
+
+                if password == Accounts[self.username]:
+                    self.clientSocket.sendall("Succesfully Logged In".encode())
+                    OnlineUsers.append(self.username)
+                else:
+
+                    while True:
+
+                        self.clientSocket.sendall("Invalid Password, Please try again!".encode())
+                        data = self.clientSocket.recv(1024)
+                        password = data.decode()
+
+                        if password == Accounts[self.username]:
+                            self.clientSocket.sendall("Successfully Logged In".encode())
+                            OnlineUsers.append(self.username)
+                            break
 
 
+            else:
+                self.clientSocket.sendall("New Account".encode())
+                data = self.clientSocket.recv(1024)
+                password = data.decode()
+                Accounts[self.username] = password
+                self.clientSocket.sendall("Succesfully Logged In".encode())
+                OnlineUsers.append(self.username)
+
+
+print("\n===== Server is running =====")
+print("===== Waiting for connection request from clients...=====")
+
+
+while True:
+    serverSocket.listen()
+    clientSockt, clientAddress = serverSocket.accept()
+    clientThread = ClientThread(clientAddress, clientSockt)
+    clientThread.start()
