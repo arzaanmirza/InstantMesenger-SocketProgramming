@@ -1,13 +1,15 @@
 from socket import *
 from threading import Thread
 import sys, select
+import time
+from datetime import datetime
 
 # acquire server host and port from command line parameter
 # if len(sys.argv) != 2:
 #     print("\n===== Error usage, python3 TCPServer3.py SERVER_PORT ======\n");
 #     exit(0);
 serverHost = "127.0.0.1"
-serverPort = 1247
+serverPort = int(sys.argv[1])
 serverAddress = (serverHost, serverPort)
 
 # define socket for the server side and bind address
@@ -16,8 +18,13 @@ serverSocket.bind(serverAddress)
 
 # Online Users
 OnlineUsers = []
+
+# Accounts & its corresponding Client Socket. Key -> username, Value -> ClientSocket
+Sockets = {}
 # Usernames & Passwords for the clients
 Accounts = {}
+# Account username and the seconds since login. Key -> username , Value -> Time at login.
+TimeAtLogin = {}
 
 def create_accounts():
     
@@ -51,6 +58,7 @@ class ClientThread(Thread):
         self.username = ""
         print("===== New connection created for: ", clientAddress)
         self.clientAlive = True
+        self.secondsSinceLogin = 0
         
     def run(self):
         message = ''
@@ -59,30 +67,31 @@ class ClientThread(Thread):
             # use recv() to receive message from the client
             data = self.clientSocket.recv(1024)
             message = data.decode()
-            self.process_login(message)
-            # if the message from client is empty, the client would be off-line then set the client as offline (alive=Flase)
-            if message == '':
+
+            if self.firstLogin == True:
+                self.process_login(message)
+
+            elif message == "whoelse":
+                self.whoelse(message)
+
+            elif message.startswith("whoelsesince"):
+                self.whoelsesince(message)
+
+            elif message.startswith("message"):
+                self.message_user(message)
+            
+            elif message == '':
+                # if the message from client is empty, the client would be off-line then set the client as offline (alive=Flase)
                 self.clientAlive = False
                 print("===== the user disconnected - ", clientAddress)
+                OnlineUsers.remove(self.username)
+                self.clientSocket.send("You are now offline.".encode())
                 break
-            
-            # handle message from the client
-            if message == 'login':
-                print("[recv] New login request")
-                self.process_login()
-            elif message == 'download':
-                print("[recv] Download request")
-                message = 'download filename'
-                print("[send] " + message)
-                self.clientSocket.send(message.encode())
-            
-            # elif message == '':
-
 
             else:
                 print("[recv] " + message)
                 print("[send] Cannot understand this message")
-                message = 'Cannot understand this message'
+                message = "This is not a recognisable command. Please try again!"
                 self.clientSocket.send(message.encode())
     
     """
@@ -129,6 +138,59 @@ class ClientThread(Thread):
                 Accounts[self.username] = password
                 self.clientSocket.sendall("Succesfully Logged In".encode())
                 OnlineUsers.append(self.username)
+
+        TimeAtLogin[self.username] = datetime.now()
+        Sockets[self.username] = self.clientSocket
+
+    def whoelse(self,message):
+        string_s = ""
+
+        for each_user in OnlineUsers:
+            if each_user != self.username:
+                string_s = string_s + " " + each_user
+
+        if len(string_s) == 0: # Checks if there is no one else online
+            self.clientSocket.send("There is no one else online except you!".encode())
+        else:
+            self.clientSocket.send(string_s.strip().encode())
+
+    def whoelsesince(self,message):
+
+        try:
+            seconds = int(message.split()[1])
+        except: # Checks for the case where the person doesn't enter the seconds as an Integer
+            self.clientSocket.send("Please enter the seconds as an Integer for the command: whoelsesince <seconds> ".encode())
+            return
+
+        currentTime = datetime.now()
+        Users = []
+        for username,loginTime in TimeAtLogin.items():
+
+            secondsDifference = currentTime - loginTime
+            secondsDifference = secondsDifference.total_seconds()
+
+            if secondsDifference <= seconds and self.username != username:
+                Users.append(username)
+        
+        Users_string = ""
+
+        for user in Users:
+            Users_string = Users_string + " " + user
+        
+        if len(Users_string.strip()) == 0:
+            self.clientSocket.send(f"No one else has logged in within the last {seconds} seconds.".encode())
+        else:
+            self.clientSocket.send(Users_string.strip().encode())
+
+    
+    def message_user(self,message):
+
+        user = message.split()[1]
+        message_recv = message.split()[2]
+        clientSocketSend = Sockets[user]
+        clientSocketSend.send(message_recv.encode())
+
+
 
 
 print("\n===== Server is running =====")

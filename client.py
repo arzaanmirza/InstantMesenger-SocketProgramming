@@ -1,24 +1,26 @@
 from socket import *
 import sys
+import select
+
 
 #Server would be running on the same host as Client
 # if len(sys.argv) != 3:
 #     print("\n===== Error usage, python3 TCPClient3.py SERVER_IP SERVER_PORT ======\n");
 #     exit(0);
 serverHost = "127.0.0.1"
-serverPort = 1247
+serverPort = int(sys.argv[1])
 serverAddress = (serverHost, serverPort)
 
 # define a socket for the client side, it would be used to communicate with the server
 clientSocket = socket(AF_INET, SOCK_STREAM)
-
+clientSocket.settimeout(0.1)
 # build connection with the server and send message to it
 clientSocket.connect(serverAddress)
 FirstLogin = True
 
 
 while True:
-
+    
     # First time logging in
     if FirstLogin == True:
         message = input("Username: ")
@@ -55,27 +57,29 @@ while True:
                 return_message = data.decode()
                 wrong_counter = wrong_counter + 1   
 
-
         FirstLogin = False # Makes it false so the login prompt never runs again for this account.
 
-
-    
-    message = input(Username + " > ")
-    clientSocket.sendall(message.encode())
-    # receive response from the server
-    # 1024 is a suggested packet size, you can specify it as 2048 or others
-    data = clientSocket.recv(1024)
-    receivedMessage = data.decode()
-
-    # parse the message received from server and take corresponding actions
-    if receivedMessage == "":
-        print("[recv] Message from server is empty!")
-    elif receivedMessage == "user credentials request":
-        print("[recv] You need to provide username and password to login")
-    elif receivedMessage == "download filename":
-        print("[recv] You need to provide the file name you want to download")
     else:
-        print("[recv] Message makes no sense")
+        
+
+        message = input(Username + " > ")
+        clientSocket.sendall(message.encode())
+
+        data = clientSocket.recv(1024)
+        receivedMessage = data.decode()
+
+        # parse the message received from server and take corresponding actions
+        if receivedMessage == "":
+            print("[recv] Message from server is empty!")
+            
+        elif receivedMessage == "user credentials request":
+            print("[recv] You need to provide username and password to login")
+        elif receivedMessage == "download filename":
+            print("[recv] You need to provide the file name you want to download")
+        else:
+            print(receivedMessage)
+        
+
 
 # close the socket
 clientSocket.close()
