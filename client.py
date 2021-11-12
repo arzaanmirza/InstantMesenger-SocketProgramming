@@ -15,6 +15,7 @@ serverAddress = (serverHost, serverPort)
 clientSocket = socket(AF_INET, SOCK_STREAM)
 # build connection with the server and send message to it
 clientSocket.connect(serverAddress)
+clientSocket.settimeout(60)
 FirstLogin = True
 
 # First time logging in

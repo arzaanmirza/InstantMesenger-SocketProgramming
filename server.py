@@ -12,6 +12,8 @@ serverHost = "127.0.0.1"
 serverPort = int(sys.argv[1])
 serverAddress = (serverHost, serverPort)
 
+timeout_inputted = int(sys.argv[2]) 
+
 # define socket for the server side and bind address
 serverSocket = socket(AF_INET, SOCK_STREAM)
 serverSocket.bind(serverAddress)
@@ -65,10 +67,27 @@ class ClientThread(Thread):
         
     def run(self):
         message = ''
+
+        self.clientSocket.settimeout(timeout_inputted)
         
         while self.clientAlive:
             # use recv() to receive message from the client
-            data = self.clientSocket.recv(1024)
+            try:
+                data = self.clientSocket.recv(1024)
+            except:
+                self.clientAlive = False
+                print("===== the user disconnected - ", clientAddress)
+                OnlineUsers.remove(self.username)
+                self.clientSocket.send("You are now offline due to inactivity.".encode())
+
+                logout_notification = f"Notification: {self.username} has been logged out due to inactivity."
+
+                for user in OnlineUsers:
+                    if self.username != user and self.username not in Blocked_Users[user]:
+                        clientSocketSend = Sockets[user]
+                        clientSocketSend.send(logout_notification.encode())
+                break
+
             message = data.decode()
 
             if self.firstLogin == True:
@@ -89,13 +108,22 @@ class ClientThread(Thread):
             elif message.startswith("unblock"):
                 self.unblock(message)
 
-            elif message == '':
+            elif message.startswith("broadcast"):
+                self.broadcast(message)
+
+            elif message == "logout":
                 # if the message from client is empty, the client would be off-line then set the client as offline (alive=Flase)
                 self.clientAlive = False
                 print("===== the user disconnected - ", clientAddress)
                 OnlineUsers.remove(self.username)
                 self.clientSocket.send("You are now offline.".encode())
-                break
+
+                logout_notification = f"Notification: {self.username} has logged out."
+
+                for user in OnlineUsers:
+                    if self.username != user and self.username not in Blocked_Users[user]:
+                        clientSocketSend = Sockets[user]
+                        clientSocketSend.send(logout_notification.encode())
 
             else:
                 print("[recv] " + message)
@@ -152,6 +180,13 @@ class ClientThread(Thread):
         Sockets[self.username] = self.clientSocket
         Address[self.username] = self.clientAddress
         Blocked_Users[self.username] = []
+
+        presence_notification = f"Notification: {self.username} has logged in."
+
+        for user in OnlineUsers:
+            if self.username != user and self.username not in Blocked_Users[user]:
+                clientSocketSend = Sockets[user]
+                clientSocketSend.send(presence_notification.encode())
 
 
     def whoelse(self,message):
@@ -228,6 +263,24 @@ class ClientThread(Thread):
         message = f"{user_blocked} has been succesfully unblocked!"
         self.clientSocket.send(message.encode())
 
+    def broadcast(self,message):
+        someone_blocked = False
+        message_recv = message.split()[1:]
+        message_recv = ' '.join(message_recv)
+        message = f"{self.username} > {message_recv}"
+
+        for user in OnlineUsers:
+
+            if user in Blocked_Users[self.username]:
+                someone_blocked = True
+
+            if self.username != user and user not in Blocked_Users[self.username]:
+                clientSocketSend = Sockets[user]
+                clientSocketSend.send(message.encode())
+
+
+        if someone_blocked:
+            self.clientSocket.send("This message could not be sent to some recipients.".encode())
 
 
 
