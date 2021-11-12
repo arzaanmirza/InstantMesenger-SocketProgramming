@@ -25,7 +25,8 @@ Sockets = {}
 Address = {}
 # Usernames & Passwords for the clients
 Accounts = {}
-
+# Offline Messages:
+Offline_Messages = {}
 # Can't send message to: Key -> username, Value -> List of users can't send message to.
 Blocked_Users = {}
 # Account username and the seconds since login. Key -> username , Value -> Time at login.
@@ -71,6 +72,7 @@ class ClientThread(Thread):
         self.clientSocket.settimeout(timeout_inputted)
         
         while self.clientAlive:
+
             # use recv() to receive message from the client
             try:
                 data = self.clientSocket.recv(1024)
@@ -175,6 +177,7 @@ class ClientThread(Thread):
                 Accounts[self.username] = password
                 self.clientSocket.sendall("Succesfully Logged In".encode())
                 OnlineUsers.append(self.username)
+                Offline_Messages[self.username] = []
 
         TimeAtLogin[self.username] = datetime.now()
         Sockets[self.username] = self.clientSocket
@@ -187,6 +190,12 @@ class ClientThread(Thread):
             if self.username != user and self.username not in Blocked_Users[user]:
                 clientSocketSend = Sockets[user]
                 clientSocketSend.send(presence_notification.encode())
+
+        # Sending the offline messages once logged back in.
+        clientSocketSend = Sockets[self.username]
+        for each_message in Offline_Messages[self.username]:
+            each_message = "\n" + each_message
+            clientSocketSend.send(each_message.encode())
 
 
     def whoelse(self,message):
@@ -236,6 +245,12 @@ class ClientThread(Thread):
         message_recv = message.split()[2:]
         message_recv = ' '.join(message_recv)
         message = f"{self.username} > {message_recv}"
+
+        if user not in OnlineUsers:
+            Offline_Messages[user].append(message)
+            return 
+
+
 
         if user in Blocked_Users[self.username]:
 
