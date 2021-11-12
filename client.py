@@ -1,7 +1,7 @@
 from socket import *
 import sys
 import select
-
+import threading
 
 #Server would be running on the same host as Client
 # if len(sys.argv) != 3:
@@ -13,73 +13,76 @@ serverAddress = (serverHost, serverPort)
 
 # define a socket for the client side, it would be used to communicate with the server
 clientSocket = socket(AF_INET, SOCK_STREAM)
-clientSocket.settimeout(0.1)
 # build connection with the server and send message to it
 clientSocket.connect(serverAddress)
 FirstLogin = True
 
+# First time logging in
+if FirstLogin == True:
+    message = input("Username: ")
+    Username = message
+    clientSocket.sendall(message.encode())
+    data = clientSocket.recv(1024)
+    account_type = data.decode() # Whether new account or old account
 
-while True:
+    if account_type == "Old Account":
+        my_password = input("Password: ")
+        clientSocket.sendall(my_password.encode())
+    elif account_type == "New Account":
+        new_password = input("This is a new user. Enter a password: ")
+        clientSocket.sendall(new_password.encode())
+
+    data = clientSocket.recv(1024)
+    return_message = data.decode()
     
-    # First time logging in
-    if FirstLogin == True:
-        message = input("Username: ")
-        Username = message
-        clientSocket.sendall(message.encode())
-        data = clientSocket.recv(1024)
-        account_type = data.decode() # Whether new account or old account
+    if return_message != "Invalid Password, Please try again!":
+        print(return_message)
+    # Special Case where the password is wrong and it has to try 3 times.
+    wrong_counter = 0
 
-        if account_type == "Old Account":
+    while return_message == "Invalid Password, Please try again!":
+        
+        if wrong_counter == 2:
+            print("Invalid Password. Your account has been blocked. Please try again later.")
+            sys.exit()
+        else:
+            print(return_message)
             my_password = input("Password: ")
             clientSocket.sendall(my_password.encode())
-        elif account_type == "New Account":
-            new_password = input("This is a new user. Enter a password: ")
-            clientSocket.sendall(new_password.encode())
+            data = clientSocket.recv(1024)
+            return_message = data.decode()
+            wrong_counter = wrong_counter + 1   
 
-        data = clientSocket.recv(1024)
-        return_message = data.decode()
-        
-        if return_message != "Invalid Password, Please try again!":
-            print(return_message)
-        # Special Case where the password is wrong and it has to try 3 times.
-        wrong_counter = 0
+    FirstLogin = False # Makes it false so the login prompt never runs again for this account.
 
-        while return_message == "Invalid Password, Please try again!":
-            
-            if wrong_counter == 2:
-                print("Invalid Password. Your account has been blocked. Please try again later.")
-                sys.exit()
-            else:
-                print(return_message)
-                my_password = input("Password: ")
-                clientSocket.sendall(my_password.encode())
-                data = clientSocket.recv(1024)
-                return_message = data.decode()
-                wrong_counter = wrong_counter + 1   
+def receive():
 
-        FirstLogin = False # Makes it false so the login prompt never runs again for this account.
+    while True:
+    
+        try:
 
-    else:
-        
+            data = clientSocket.recv(1024)
+            receivedMessage = data.decode()
 
-        message = input(Username + " > ")
+            if receivedMessage:
+                print(receivedMessage)
+                
+
+        except:
+            clientSocket.close()
+            break
+
+def write():
+    
+    while True:
+
+        message = input()
         clientSocket.sendall(message.encode())
 
-        data = clientSocket.recv(1024)
-        receivedMessage = data.decode()
-
-        # parse the message received from server and take corresponding actions
-        if receivedMessage == "":
-            print("[recv] Message from server is empty!")
-            
-        elif receivedMessage == "user credentials request":
-            print("[recv] You need to provide username and password to login")
-        elif receivedMessage == "download filename":
-            print("[recv] You need to provide the file name you want to download")
-        else:
-            print(receivedMessage)
-        
 
 
-# close the socket
-clientSocket.close()
+receive_thread = threading.Thread(target=receive)
+receive_thread.start()
+
+write_thread = threading.Thread(target=write)
+write_thread.start()

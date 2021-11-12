@@ -18,11 +18,14 @@ serverSocket.bind(serverAddress)
 
 # Online Users
 OnlineUsers = []
-
 # Accounts & its corresponding Client Socket. Key -> username, Value -> ClientSocket
 Sockets = {}
+Address = {}
 # Usernames & Passwords for the clients
 Accounts = {}
+
+# Can't send message to: Key -> username, Value -> List of users can't send message to.
+Blocked_Users = {}
 # Account username and the seconds since login. Key -> username , Value -> Time at login.
 TimeAtLogin = {}
 
@@ -80,6 +83,12 @@ class ClientThread(Thread):
             elif message.startswith("message"):
                 self.message_user(message)
             
+            elif message.startswith("block"):
+                self.block(message)
+
+            elif message.startswith("unblock"):
+                self.unblock(message)
+
             elif message == '':
                 # if the message from client is empty, the client would be off-line then set the client as offline (alive=Flase)
                 self.clientAlive = False
@@ -141,12 +150,15 @@ class ClientThread(Thread):
 
         TimeAtLogin[self.username] = datetime.now()
         Sockets[self.username] = self.clientSocket
+        Address[self.username] = self.clientAddress
+        Blocked_Users[self.username] = []
+
 
     def whoelse(self,message):
         string_s = ""
 
         for each_user in OnlineUsers:
-            if each_user != self.username:
+            if each_user != self.username and each_user not in Blocked_Users[self.username]:
                 string_s = string_s + " " + each_user
 
         if len(string_s) == 0: # Checks if there is no one else online
@@ -169,7 +181,7 @@ class ClientThread(Thread):
             secondsDifference = currentTime - loginTime
             secondsDifference = secondsDifference.total_seconds()
 
-            if secondsDifference <= seconds and self.username != username:
+            if secondsDifference <= seconds and self.username != username and username not in Blocked_Users[self.username]:
                 Users.append(username)
         
         Users_string = ""
@@ -186,9 +198,36 @@ class ClientThread(Thread):
     def message_user(self,message):
 
         user = message.split()[1]
-        message_recv = message.split()[2]
-        clientSocketSend = Sockets[user]
-        clientSocketSend.send(message_recv.encode())
+        message_recv = message.split()[2:]
+        message_recv = ' '.join(message_recv)
+        message = f"{self.username} > {message_recv}"
+
+        if user in Blocked_Users[self.username]:
+
+            self.clientSocket.send("Sorry, this message is unable to be sent.".encode())
+
+        else:
+
+            clientSocketSend = Sockets[user]
+            clientSocketSend.send(message.encode())
+
+    def block(self,message):
+
+        user_blocked = message.split()[1] # User to be blocked.
+        Blocked_Users[user_blocked].append(self.username)
+        message = f"{user_blocked} has been succesfully blocked!"
+        self.clientSocket.send(message.encode())
+
+    def unblock(self,message):
+
+        user_blocked = message.split()[1] # User to be unblocked.
+        try:
+            Blocked_Users[user_blocked].remove(self.username)
+        except:
+            return
+        message = f"{user_blocked} has been succesfully unblocked!"
+        self.clientSocket.send(message.encode())
+
 
 
 
