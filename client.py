@@ -56,6 +56,7 @@ if FirstLogin == True:
 
     FirstLogin = False # Makes it false so the login prompt never runs again for this account.
 
+
 def receive():
 
     while True:
@@ -65,9 +66,14 @@ def receive():
             data = clientSocket.recv(1024)
             receivedMessage = data.decode()
 
-            if receivedMessage:
+            if receivedMessage.startswith("P2P_SocketAddress:"):
+                user_socket_address = receivedMessage.split()[1].strip()
+                print("We get that users socket address.")
+                start_p2p_connection(user_socket_address)
+
+
+            elif receivedMessage:
                 print(receivedMessage)
-                
 
         except:
             clientSocket.close()
@@ -78,8 +84,16 @@ def write():
     while True:
 
         message = input()
+        if message == "Yes" or message == "yes" or message == "No" or message == "no":
+            message = f"P2P Connect with {Username} {message}"
+        
         clientSocket.sendall(message.encode())
 
+def start_p2p_connection(user_socket_address):
+
+    clientSocket = socket(AF_INET, SOCK_STREAM)
+    serverAddress = (user_socket_address, serverPort)
+    clientSocket.connect(serverAddress)
 
 
 receive_thread = threading.Thread(target=receive)
@@ -87,3 +101,6 @@ receive_thread.start()
 
 write_thread = threading.Thread(target=write)
 write_thread.start()
+
+
+

@@ -12,7 +12,7 @@ serverHost = "127.0.0.1"
 serverPort = int(sys.argv[1])
 serverAddress = (serverHost, serverPort)
 
-timeout_inputted = int(sys.argv[2]) 
+# timeout_inputted = int(sys.argv[2]) 
 
 # define socket for the server side and bind address
 serverSocket = socket(AF_INET, SOCK_STREAM)
@@ -65,11 +65,12 @@ class ClientThread(Thread):
         print("===== New connection created for: ", clientAddress)
         self.clientAlive = True
         self.secondsSinceLogin = 0
+        self.p2p_user = ""
         
     def run(self):
         message = ''
 
-        self.clientSocket.settimeout(timeout_inputted)
+        # self.clientSocket.settimeout(timeout_inputted)
         
         while self.clientAlive:
 
@@ -112,6 +113,13 @@ class ClientThread(Thread):
 
             elif message.startswith("broadcast"):
                 self.broadcast(message)
+            
+            elif message.startswith("startprivate"):
+                self.startprivate(message)
+
+            elif message.startswith("P2P Connect"):
+                print(f"P2P CONNECT: {message}")
+                self.p2p_connect(message)
 
             elif message == "logout":
                 # if the message from client is empty, the client would be off-line then set the client as offline (alive=Flase)
@@ -250,8 +258,6 @@ class ClientThread(Thread):
             Offline_Messages[user].append(message)
             return 
 
-
-
         if user in Blocked_Users[self.username]:
 
             self.clientSocket.send("Sorry, this message is unable to be sent.".encode())
@@ -296,6 +302,49 @@ class ClientThread(Thread):
 
         if someone_blocked:
             self.clientSocket.send("This message could not be sent to some recipients.".encode())
+
+    def startprivate(self,message):
+        
+        user = message.split()[1]
+        self.p2p_user = user.strip()
+        clientSocketSend = Sockets[user]
+        send_message = f"Are you willing to engage in a private chat with {self.username}? Reply with 'Yes' or 'No'"
+        clientSocketSend.send(send_message.encode())
+    
+    def p2p_connect(self,message):
+
+        user = message.split()[3].strip() # Name of user
+        reply = message.split()[4].strip() # Yes or No
+        clientSocketSend = Sockets[user] # Address of the user
+
+        # You are sending it to yourself at this point as user is yourself. You need to find Arzaan and send it to him. 
+        if user in Blocked_Users[self.username]:
+            clientSocketSend.send("You can't start a private chat with yourself!".encode())
+            return
+
+        elif user in Blocked_Users[self.username]:
+            clientSocketSend.send("Unfortunately, this private chat cannot be commenced".encode())
+            return 
+        
+        elif user not in OnlineUsers:
+            clientSocketSend.send("This user is not Online!".encode())
+            return
+
+        if reply == "Yes" or "yes":
+            socket_address = Sockets[self.username]
+            send_mesage = f"P2P_SocketAddress: {socket_address}"
+            self.clientSocket.send(send_mesage.encode())
+            return
+
+        elif reply == "No" or "no":
+            send_message = f"{user} has declined to have a private chat with you."
+            clientSocketSend.send(send_mesage.encode())
+            return
+        else:
+            return
+
+
+        
 
 
 
