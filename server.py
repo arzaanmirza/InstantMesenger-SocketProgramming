@@ -31,6 +31,8 @@ Offline_Messages = {}
 Blocked_Users = {}
 # Account username and the seconds since login. Key -> username , Value -> Time at login.
 TimeAtLogin = {}
+# Save p2p name
+P2P_User = {}
 
 def create_accounts():
     
@@ -118,8 +120,11 @@ class ClientThread(Thread):
                 self.startprivate(message)
 
             elif message.startswith("P2P Connect"):
-                print(f"P2P CONNECT: {message}")
+                # print(f"P2P CONNECT: {message}")
                 self.p2p_connect(message)
+
+            elif message.startswith("P2P_SocketAddress"):
+                self.clientSocket.send(message.encode())
 
             elif message == "logout":
                 # if the message from client is empty, the client would be off-line then set the client as offline (alive=Flase)
@@ -306,14 +311,14 @@ class ClientThread(Thread):
     def startprivate(self,message):
         
         user = message.split()[1]
-        self.p2p_user = user.strip()
-        clientSocketSend = Sockets[user]
+        P2P_User[user.strip()] = self.username # Khush -> Arzaan
+        clientSocketSend = Sockets[user.strip()] 
         send_message = f"Are you willing to engage in a private chat with {self.username}? Reply with 'Yes' or 'No'"
         clientSocketSend.send(send_message.encode())
     
     def p2p_connect(self,message):
 
-        user = message.split()[3].strip() # Name of user
+        user = P2P_User[self.username]
         reply = message.split()[4].strip() # Yes or No
         clientSocketSend = Sockets[user] # Address of the user
 
@@ -333,7 +338,7 @@ class ClientThread(Thread):
         if reply == "Yes" or "yes":
             socket_address = Sockets[self.username]
             send_mesage = f"P2P_SocketAddress: {socket_address}"
-            self.clientSocket.send(send_mesage.encode())
+            clientSocketSend.send(send_mesage.encode())
             return
 
         elif reply == "No" or "no":

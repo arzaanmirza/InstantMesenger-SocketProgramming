@@ -69,7 +69,7 @@ def receive():
             if receivedMessage.startswith("P2P_SocketAddress:"):
                 user_socket_address = receivedMessage.split()[1].strip()
                 print("We get that users socket address.")
-                start_p2p_connection(user_socket_address)
+                # start_p2p_connection(user_socket_address)
 
 
             elif receivedMessage:
